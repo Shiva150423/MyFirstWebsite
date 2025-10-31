@@ -1,206 +1,195 @@
-// Simple Snake game using canvas
 (() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  const GRID_SIZE = 20;
+  const CELL = 2;
+  const WIDTH = GRID_SIZE * CELL;
+  const HEIGHT = GRID_SIZE * CELL;
+  const INITIAL_SPEED = 200;
 
+  const canvas = document.getElementById('glCanvas');
   const scoreEl = document.getElementById('score');
   const statusEl = document.getElementById('status');
   const startBtn = document.getElementById('startBtn');
   const pauseBtn = document.getElementById('pauseBtn');
   const restartBtn = document.getElementById('restartBtn');
 
-  // Grid settings
-  const GRID = 20; // size of a cell in pixels
-  const COLS = Math.floor(canvas.width / GRID);
-  const ROWS = Math.floor(canvas.height / GRID);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf9fafb);
+
+  const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+  camera.position.set(0, GRID_SIZE * 1.2, GRID_SIZE * 1.2);
+  camera.lookAt(0, 0, 0);
+
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 7.5);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+  const gridHelper = new THREE.GridHelper(WIDTH, GRID_SIZE, 0xe5e7eb, 0xe5e7eb);
+  gridHelper.rotation.x = Math.PI / 2;
+  scene.add(gridHelper);
+
+  const snakeHeadMat = new THREE.MeshStandardMaterial({ color: 0x065f46 });
+  const snakeBodyMat = new THREE.MeshStandardMaterial({ color: 0x10b981 });
+  const foodMat = new THREE.MeshStandardMaterial({ color: 0xef4444 });
 
   let snake = [];
-  let direction = { x: 1, y: 0 }; // start moving right
+  let dir = { x: 1, y: 0 };
+  let nextDir = { x: 1, y: 0 };
   let food = null;
   let score = 0;
-  let gameInterval = null;
-  let isRunning = false;
-  let speed = 120; // ms per move, lower = faster
+  let speed = INITIAL_SPEED;
+  let interval = null;
+  let running = false;
 
-  // Initialize/reset the game
-  function resetGame() {
-    const startX = Math.floor(COLS / 2);
-    const startY = Math.floor(ROWS / 2);
-    snake = [
-      { x: startX, y: startY },
-      { x: startX - 1, y: startY },
-      { x: startX - 2, y: startY }
-    ];
-    direction = { x: 1, y: 0 };
-    score = 0;
-    scoreEl.textContent = score;
-    placeFood();
-    stopLoop();
-    draw();
-    statusEl.textContent = 'Ready — press Start ▶';
+  function gridToWorld(gx, gy) {
+    const offset = (GRID_SIZE / 2 - 0.5) * CELL;
+    return { x: gx * CELL - offset, y: CELL / 2, z: gy * CELL - offset };
   }
 
-  function startLoop() {
-    if (isRunning) return;
-    isRunning = true;
-    statusEl.textContent = 'Playing...';
-    gameInterval = setInterval(tick, speed);
+  function makeCube(mat) {
+    return new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.9, CELL * 0.9, CELL * 0.9), mat);
+  }
+
+  function placeFood() {
+    if (food && food.mesh) scene.remove(food.mesh);
+    let x, y;
+    do {
+      x = Math.floor(Math.random() * GRID_SIZE);
+      y = Math.floor(Math.random() * GRID_SIZE);
+    } while (snake.some(s => s.x === x && s.y === y));
+
+    const pos = gridToWorld(x, y);
+    const mesh = makeCube(foodMat);
+    mesh.position.set(pos.x, pos.y, pos.z);
+    scene.add(mesh);
+    food = { x, y, mesh };
+  }
+
+  function resetGame() {
+    snake.forEach(s => scene.remove(s.mesh));
+    snake = [];
+    const cx = Math.floor(GRID_SIZE / 2);
+    const cy = Math.floor(GRID_SIZE / 2);
+    for (let i = 0; i < 3; i++) {
+      const x = cx - i;
+      const y = cy;
+      const mesh = makeCube(i === 0 ? snakeHeadMat : snakeBodyMat);
+      const pos = gridToWorld(x, y);
+      mesh.position.set(pos.x, pos.y, pos.z);
+      scene.add(mesh);
+      snake.push({ x, y, mesh });
+    }
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    speed = INITIAL_SPEED;
+    updateHUD();
+    placeFood();
+    stopGame();
+    statusEl.textContent = "Ready — press ▶ Start";
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+  }
+
+  function startGame() {
+    if (running) return;
+    running = true;
+    statusEl.textContent = "Playing...";
+    interval = setInterval(move, speed);
     startBtn.disabled = true;
     pauseBtn.disabled = false;
   }
 
-  function stopLoop() {
-    isRunning = false;
-    clearInterval(gameInterval);
-    gameInterval = null;
+  function stopGame() {
+    running = false;
+    clearInterval(interval);
+    interval = null;
     startBtn.disabled = false;
     pauseBtn.disabled = true;
   }
 
-  function placeFood() {
-    let tries = 0;
-    while (tries < 1000) {
-      const fx = Math.floor(Math.random() * COLS);
-      const fy = Math.floor(Math.random() * ROWS);
-      if (!snake.some(s => s.x === fx && s.y === fy)) {
-        food = { x: fx, y: fy };
-        return;
-      }
-      tries++;
-    }
-    // fallback
-    food = { x: 0, y: 0 };
-  }
+  function move() {
+    dir = nextDir;
+    let head = snake[0];
+    let newX = head.x + dir.x;
+    let newY = head.y + dir.y;
 
-  function tick() {
-    // New head
-    const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+    // ✅ Wrap around logic
+    if (newX < 0) newX = GRID_SIZE - 1;
+    if (newX >= GRID_SIZE) newX = 0;
+    if (newY < 0) newY = GRID_SIZE - 1;
+    if (newY >= GRID_SIZE) newY = 0;
 
-    // Check wall collision
-    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
-      return gameOver();
-    }
+    // check self collision
+    if (snake.some(s => s.x === newX && s.y === newY)) return gameOver();
 
-    // Check self collision
-    if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
-      return gameOver();
-    }
+    const newHeadMesh = makeCube(snakeHeadMat);
+    const pos = gridToWorld(newX, newY);
+    newHeadMesh.position.set(pos.x, pos.y, pos.z);
+    scene.add(newHeadMesh);
 
-    snake.unshift(head);
+    snake[0].mesh.material = snakeBodyMat;
+    snake.unshift({ x: newX, y: newY, mesh: newHeadMesh });
 
-    // Eating food
-    if (food && head.x === food.x && head.y === food.y) {
+    // Eat food → grow
+    if (food && newX === food.x && newY === food.y) {
+      scene.remove(food.mesh);
+      food = null;
       score++;
-      scoreEl.textContent = score;
-      // speed up a little every 5 points
-      if (score % 5 === 0 && speed > 40) {
-        speed -= 8;
-        // restart interval with new speed
-        clearInterval(gameInterval);
-        gameInterval = setInterval(tick, speed);
-      }
+      updateHUD();
       placeFood();
+      if (speed > 60) {
+        speed -= 10;
+        clearInterval(interval);
+        interval = setInterval(move, speed);
+      }
     } else {
-      // Move forward: remove tail
-      snake.pop();
+      // move normally (remove tail)
+      const tail = snake.pop();
+      scene.remove(tail.mesh);
     }
-
-    draw();
   }
 
   function gameOver() {
-    stopLoop();
-    statusEl.textContent = `Game Over — Score: ${score}. Press Restart ↺`;
-    // flash canvas red then redraw
-    flashCanvas();
+    stopGame();
+    statusEl.textContent = `Game Over! Score: ${score}`;
   }
 
-  function flashCanvas() {
-    const prev = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(220,38,38,0.25)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    setTimeout(() => {
-      ctx.putImageData(prev, 0, 0);
-    }, 120);
-  }
-
-  function drawCell(x, y, color, radius = 4) {
-    const px = x * GRID;
-    const py = y * GRID;
-    // rounded rect
-    ctx.fillStyle = color;
-    const r = Math.min(radius, GRID / 2 - 1);
-    ctx.beginPath();
-    ctx.moveTo(px + r, py);
-    ctx.arcTo(px + GRID, py, px + GRID, py + GRID, r);
-    ctx.arcTo(px + GRID, py + GRID, px, py + GRID, r);
-    ctx.arcTo(px, py + GRID, px, py, r);
-    ctx.arcTo(px, py, px + GRID, py, r);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  function draw() {
-    // clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // background grid optional (light)
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // draw food
-    if (food) {
-      drawCell(food.x, food.y, '#ef4444', 6);
-    }
-
-    // draw snake: head different color
-    snake.forEach((segment, idx) => {
-      const col = idx === 0 ? '#065f46' : '#059669';
-      drawCell(segment.x, segment.y, col, 6);
-    });
-  }
-
-  // Input handling
-  function setDirection(dx, dy) {
-    // prevent reversing directly
-    if (snake.length > 1) {
-      const nextX = snake[0].x + dx;
-      const nextY = snake[0].y + dy;
-      if (nextX === snake[1].x && nextY === snake[1].y) {
-        return;
-      }
-    }
-    direction = { x: dx, y: dy };
-  }
-
-  window.addEventListener('keydown', (e) => {
-    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d','W','A','S','D'].includes(e.key)) {
-      e.preventDefault();
-    }
-    switch (e.key) {
-      case 'ArrowUp': case 'w': case 'W': setDirection(0, -1); break;
-      case 'ArrowDown': case 's': case 'S': setDirection(0, 1); break;
-      case 'ArrowLeft': case 'a': case 'A': setDirection(-1, 0); break;
-      case 'ArrowRight': case 'd': case 'D': setDirection(1, 0); break;
-      case ' ': // space to toggle
-        if (isRunning) stopLoop(); else startLoop();
-        break;
-    }
+  window.addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    if (key === "arrowup" || key === "w") nextDir = { x: 0, y: -1 };
+    if (key === "arrowdown" || key === "s") nextDir = { x: 0, y: 1 };
+    if (key === "arrowleft" || key === "a") nextDir = { x: -1, y: 0 };
+    if (key === "arrowright" || key === "d") nextDir = { x: 1, y: 0 };
   });
 
-  // Buttons
-  startBtn.addEventListener('click', () => startLoop());
-  pauseBtn.addEventListener('click', () => stopLoop());
-  restartBtn.addEventListener('click', () => {
+  startBtn.onclick = startGame;
+  pauseBtn.onclick = stopGame;
+  restartBtn.onclick = () => {
     resetGame();
-    startLoop();
-  });
+    startGame();
+  };
 
-  // Prevent accidental text selection on double-click
-  canvas.addEventListener('mousedown', (e) => e.preventDefault());
+  function onResize() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", onResize);
 
-  // initialize
+  function render() {
+    requestAnimationFrame(render);
+    renderer.render(scene, camera);
+  }
+
   resetGame();
-  // enable pause disabled state initially
-  pauseBtn.disabled = true;
+  render();
 })();
