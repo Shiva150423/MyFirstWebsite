@@ -1,16 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Catch the Button Game</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Snake Game</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>🎮 Catch the Button Game!</h1>
-  <h2>Score: <span id="score">0</span></h2>
-  <button id="catch-me">Catch Me!</button>
-  
+  <main>
+    <h1>🐍 Snake — Catch & Grow!</h1>
+
+    <div class="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div id="status">Press ▶ Start or use Arrow keys</div>
+    </div>
+
+    <canvas id="game" width="600" height="400"></canvas>
+
+    <div class="controls">
+      <button id="startBtn">Start ▶</button>
+      <button id="pauseBtn">Pause ⏸</button>
+      <button id="restartBtn">Restart ↺</button>
+    </div>
+
+    <p class="instructions">
+      Controls: Arrow keys (or W A S D). Don't hit the walls or yourself. Food = red square.
+    </p>
+  </main>
+
   <script src="script.js"></script>
 </body>
 </html>
