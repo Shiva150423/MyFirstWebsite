@@ -1,32 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Snake Game</title>
+  <title>3D Snake Game</title>
   <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/three@0.156.0/build/three.min.js"></script>
 </head>
 <body>
-  <main>
-    <h1>🐍 Snake — Catch & Grow!</h1>
-
+  <header>
+    <h1>🐍 3D Snake Game</h1>
     <div class="hud">
       <div>Score: <span id="score">0</span></div>
-      <div id="status">Press ▶ Start or use Arrow keys</div>
+      <div id="status">Press ▶ Start</div>
     </div>
+  </header>
 
-    <canvas id="game" width="600" height="400"></canvas>
+  <div id="canvasWrap">
+    <canvas id="glCanvas"></canvas>
+  </div>
 
-    <div class="controls">
-      <button id="startBtn">Start ▶</button>
-      <button id="pauseBtn">Pause ⏸</button>
-      <button id="restartBtn">Restart ↺</button>
-    </div>
+  <div class="controls">
+    <button id="startBtn">Start ▶</button>
+    <button id="pauseBtn">Pause ⏸</button>
+    <button id="restartBtn">Restart ↺</button>
+  </div>
 
-    <p class="instructions">
-      Controls: Arrow keys (or W A S D). Don't hit the walls or yourself. Food = red square.
-    </p>
-  </main>
+  <footer class="instructions">
+    Use Arrow Keys or W A S D to move.  
+    Snake can wrap around edges 🌍
+  </footer>
 
   <script src="script.js"></script>
 </body>
